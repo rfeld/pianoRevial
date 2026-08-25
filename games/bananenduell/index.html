@@ -35,11 +35,13 @@
   .wrap{
     max-width:1180px;
     margin:0 auto;
-    padding:14px 14px 22px;
+    padding:10px 12px 12px;
     display:flex;
     flex-direction:column;
-    gap:12px;
-    min-height:100dvh;
+    gap:10px;
+    /* Feste Fensterhöhe: die Arena schrumpft, damit Bedienfeld und HUD
+       immer sichtbar bleiben – auch unter Safaris Adressleiste. */
+    height:100dvh;
   }
 
   /* ---------- HUD ---------- */
@@ -125,20 +127,34 @@
   }
 
   /* ---------- Arena ---------- */
+  /* Die Bühne nimmt den Rest der Fensterhöhe; fitArena() legt darin das
+     größte 16:9-Rechteck fest, damit der Rahmen das Bild ohne Balken
+     umschließt – in Quer- wie Hochformat. */
+  .stage{
+    flex:1 1 auto;
+    min-height:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
   .arena{
     position:relative;
+    display:flex;
     border-radius:var(--r);
     overflow:hidden;
     border:1px solid var(--line);
-    background:#0D1626;
+    background:#0B1420;
     line-height:0;
   }
 
+  /* Das Bild behält 16:9 und wird in die verfügbare Fläche eingepasst.
+     Die Zeigerkoordinaten rechnen den Randstreifen heraus. */
   canvas{
     display:block;
     width:100%;
-    height:auto;
-    aspect-ratio:16/9;
+    height:100%;
+    object-fit:contain;
     touch-action:none;
     will-change:transform;
   }
@@ -389,6 +405,24 @@
     letter-spacing:.04em;
   }
 
+  /* Flache Fenster (Safari mit Adressleiste, iPad quer): Platz für das
+     Spielfeld freiräumen, ohne dass Bedienelemente unter 38px fallen. */
+  @media (max-height:700px){
+    .foot{display:none;}
+    .deck{padding:10px 12px;}
+    .ctrl .top{margin-bottom:5px;}
+    .ctrl .val{font-size:18px;}
+    .fire button{height:48px;font-size:20px;}
+    .pill,.wind{padding:6px 12px;}
+  }
+  @media (max-height:560px){
+    .wrap{gap:8px;padding:8px 10px 10px;}
+    .fire{flex-direction:row-reverse;align-items:stretch;}
+    .util{align-items:stretch;}
+    .util button{padding:0 9px;font-size:10px;}
+    .fire button{height:auto;min-height:44px;padding:0 22px;}
+  }
+
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.01ms !important;transition-duration:.01ms !important;}
   }
@@ -416,6 +450,7 @@
     </div>
   </header>
 
+  <div class="stage" id="stage">
   <div class="arena" id="arena">
     <canvas id="game"></canvas>
     <div class="msg" id="msg"></div>
@@ -438,6 +473,7 @@
         <p class="hint" id="hintTxt">Zum Zielen ins Bild ziehen</p>
       </div>
     </div>
+  </div>
   </div>
 
   <div class="deck">
@@ -1488,12 +1524,17 @@
   /* ============================================================
      Eingabe
      ============================================================ */
+  // object-fit:contain lässt Randstreifen im Elementrahmen stehen; die
+  // müssen herausgerechnet werden, sonst zielt der Finger versetzt.
   function canvasPoint(ev){
     const r = cv.getBoundingClientRect();
     const src = ev.touches && ev.touches[0] ? ev.touches[0] : ev;
+    const scale = Math.min(r.width / W, r.height / H);
+    const ox = r.left + (r.width  - W * scale) / 2;
+    const oy = r.top  + (r.height - H * scale) / 2;
     return {
-      x: (src.clientX - r.left) / r.width  * W,
-      y: (src.clientY - r.top)  / r.height * H
+      x: (src.clientX - ox) / scale,
+      y: (src.clientY - oy) / scale
     };
   }
 
@@ -1605,6 +1646,29 @@
     ev.preventDefault();
     syncControls();
   });
+
+  /* ============================================================
+     Einpassen
+     ============================================================ */
+  const stage = document.getElementById('stage');
+  const arena = document.getElementById('arena');
+
+  function fitArena(){
+    const r = stage.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+    const s = Math.min(r.width / W, r.height / H);
+    arena.style.width  = Math.floor(W * s) + 'px';
+    arena.style.height = Math.floor(H * s) + 'px';
+  }
+
+  // Die Arena liegt in der Bühne, ändert deren Maße also nicht – keine
+  // Rückkopplung durch den Beobachter.
+  if (window.ResizeObserver) new ResizeObserver(fitArena).observe(stage);
+  window.addEventListener('resize', fitArena);
+  window.addEventListener('orientationchange', function(){
+    setTimeout(fitArena, 120);
+  });
+  fitArena();
 
   /* ============================================================
      Start
